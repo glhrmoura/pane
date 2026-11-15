@@ -1,16 +1,31 @@
 import AppKit
+import ServiceManagement
 import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static var openMainWindow: (() -> Void)?
 
+    private var launchedAtLogin = false
+
     func applicationWillFinishLaunching(_ notification: Notification) {
         Typeface.register()
+        launchedAtLogin = Self.startedWithSession()
+        if launchedAtLogin { NSApp.setActivationPolicy(.accessory) }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
+        launchedAtLogin = launchedAtLogin || Self.launchedAsLoginItem()
+        if launchedAtLogin {
+            NSApp.setActivationPolicy(.accessory)
+            DispatchQueue.main.async {
+                for window in NSApp.windows where window.canBecomeMain {
+                    window.close()
+                }
+            }
+        } else {
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+        }
         NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
             object: nil,
@@ -32,6 +47,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    private static func launchedAsLoginItem() -> Bool {
+        guard let event = NSAppleEventManager.shared().currentAppleEvent,
+              event.eventID == kAEOpenApplication,
+              let property = event.paramDescriptor(forKeyword: keyAEPropData)
+        else { return false }
+        return property.enumCodeValue == keyAELaunchedAsLogInItem
+    }
+
+    private static func startedWithSession() -> Bool {
+        guard SMAppService.mainApp.status == .enabled, let start = sessionStart() else { return false }
+        return Date().timeIntervalSince(start) < 120
+    }
+
+    private static func sessionStart() -> Date? {
+        let user = NSUserName()
+        var latest: Date?
+        setutxent()
+        defer { endutxent() }
+        while let record = getutxent() {
+            var entry = record.pointee
+            guard entry.ut_type == USER_PROCESS else { continue }
+            let name = withUnsafeBytes(of: &entry.ut_user) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+            let line = withUnsafeBytes(of: &entry.ut_line) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+            guard name == user, line == "console" else { continue }
+            let date = Date(timeIntervalSince1970: TimeInterval(entry.ut_tv.tv_sec) + TimeInterval(entry.ut_tv.tv_usec) / 1_000_000)
+            if latest.map({ date > $0 }) ?? true { latest = date }
+        }
+        return latest
     }
 }
 
