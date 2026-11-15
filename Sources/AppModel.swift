@@ -5,12 +5,26 @@ import Observation
 private struct StoredState: Codable {
     var favorites: [Wallpaper] = []
     var history: [HistoryEntry] = []
-    var category: WallCategory = .landscapes
+    var category: WallCategory = .nature
     var applyToAllScreens = true
     var rotationEnabled = false
     var rotationMinutes = 30
     var rotationSource: RotationSource = .favorites
     var rotationCategory: WallCategory?
+}
+
+extension StoredState {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        favorites = (try? container.decode([Wallpaper].self, forKey: .favorites)) ?? []
+        history = (try? container.decode([HistoryEntry].self, forKey: .history)) ?? []
+        category = (try? container.decode(WallCategory.self, forKey: .category)) ?? .nature
+        applyToAllScreens = (try? container.decode(Bool.self, forKey: .applyToAllScreens)) ?? true
+        rotationEnabled = (try? container.decode(Bool.self, forKey: .rotationEnabled)) ?? false
+        rotationMinutes = (try? container.decode(Int.self, forKey: .rotationMinutes)) ?? 30
+        rotationSource = (try? container.decode(RotationSource.self, forKey: .rotationSource)) ?? .favorites
+        rotationCategory = try? container.decode(WallCategory.self, forKey: .rotationCategory)
+    }
 }
 
 struct CategoryFeed {
@@ -24,7 +38,7 @@ struct CategoryFeed {
 @Observable
 @MainActor
 final class AppModel {
-    static let rotationOptions = [15, 30, 60, 180, 720, 1440]
+    static let rotationOptions = [5, 15, 30, 60, 120, 360, 720, 1440]
 
     var feeds: [WallCategory: CategoryFeed] = [:]
     var loadingCategories: Set<WallCategory> = []
@@ -34,8 +48,9 @@ final class AppModel {
     var toast: String?
     var nextRotation: Date?
     var isTurning = false
+    var credits: [String: Wallpaper] = [:]
 
-    var category: WallCategory = .landscapes {
+    var category: WallCategory = .nature {
         didSet {
             persist()
             Task { await loadMore() }
@@ -47,11 +62,11 @@ final class AppModel {
     var rotationEnabled = false { didSet { persist(); scheduleRotation() } }
     var rotationMinutes = 30 { didSet { persist(); scheduleRotation() } }
     var rotationSource: RotationSource = .favorites { didSet { persist() } }
-    var rotationCategory: WallCategory = .landscapes { didSet { persist() } }
+    var rotationCategory: WallCategory = .nature { didSet { persist() } }
 
     @ObservationIgnored private var restoring = false
     @ObservationIgnored private var rotationTask: Task<Void, Never>?
-    @ObservationIgnored private let client = CommonsClient.shared
+    @ObservationIgnored private let client = WallcraftClient.shared
 
     private var stateFile: URL {
         DesktopService.supportDirectory.appendingPathComponent("library.json")
@@ -119,6 +134,25 @@ final class AppModel {
         favorites.contains { $0.id == wallpaper.id }
     }
 
+    func withCredit(_ wallpaper: Wallpaper) async -> Wallpaper {
+        guard wallpaper.isWallcraft, wallpaper.author.isEmpty else { return wallpaper }
+        if let known = credits[wallpaper.id] { return known }
+        guard let found = try? await client.credit(for: wallpaper), !found.author.isEmpty else { return wallpaper }
+        let credited = Wallpaper(
+            id: wallpaper.id,
+            title: wallpaper.title,
+            author: found.author,
+            license: found.license,
+            width: wallpaper.width,
+            height: wallpaper.height,
+            originalURL: wallpaper.originalURL,
+            thumbnailBase: wallpaper.thumbnailBase,
+            pageURL: wallpaper.pageURL
+        )
+        credits[wallpaper.id] = credited
+        return credited
+    }
+
     func toggleFavorite(_ wallpaper: Wallpaper) {
         if let index = favorites.firstIndex(where: { $0.id == wallpaper.id }) {
             favorites.remove(at: index)
@@ -135,8 +169,9 @@ final class AppModel {
         defer { busyIDs.remove(wallpaper.id) }
         do {
             try await DesktopService.apply(wallpaper, filters: used, allScreens: applyToAllScreens)
+            let credited = await withCredit(wallpaper)
             history.removeAll { $0.wallpaper.id == wallpaper.id }
-            history.insert(HistoryEntry(wallpaper: wallpaper, filters: used, date: Date()), at: 0)
+            history.insert(HistoryEntry(wallpaper: credited, filters: used, date: Date()), at: 0)
             if history.count > 100 { history.removeLast(history.count - 100) }
             flash("Papel de parede aplicado")
         } catch {
@@ -222,7 +257,7 @@ final class AppModel {
         favorites = state.favorites
         history = state.history
         applyToAllScreens = state.applyToAllScreens
-        rotationMinutes = state.rotationMinutes
+        rotationMinutes = Self.rotationOptions.min { abs($0 - state.rotationMinutes) < abs($1 - state.rotationMinutes) } ?? 30
         rotationSource = state.rotationSource
         rotationCategory = state.rotationCategory ?? state.category
         rotationEnabled = state.rotationEnabled
