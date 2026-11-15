@@ -14,9 +14,29 @@ struct Wallpaper: Codable, Hashable, Identifiable, Sendable {
     let thumbnailBase: URL?
     let pageURL: URL
 
+    static let wallcraftSizes = [(1280, 720), (1920, 1080), (2560, 1440), (3840, 2160)]
+
     var resolutionLabel: String { "\(width) × \(height)" }
 
+    var isWallcraft: Bool { originalURL.host == "images.wallpaperscraft.com" }
+
+    var sourceName: String { isWallcraft ? "Wallcraft" : "Wikimedia Commons" }
+
+    var credit: String {
+        if author.isEmpty { return "via \(sourceName)" }
+        return license.isEmpty ? "foto de \(author)" : "foto de \(author) · \(license)"
+    }
+
     func url(forWidth requested: Int) -> URL {
+        if isWallcraft {
+            let size = Self.wallcraftSizes.first { $0.0 >= requested && $0.0 <= width } ?? (width, height)
+            let path = originalURL.absoluteString.replacingOccurrences(
+                of: #"_\d+x\d+\.jpg$"#,
+                with: "_\(size.0)x\(size.1).jpg",
+                options: .regularExpression
+            )
+            return URL(string: path) ?? originalURL
+        }
         guard requested < width,
               let base = thumbnailBase,
               let step = Self.standardWidths.first(where: { $0 >= requested }),
@@ -56,68 +76,98 @@ struct HistoryEntry: Codable, Hashable, Identifiable, Sendable {
 
 enum WallCategory: String, Codable, CaseIterable, Identifiable, Sendable {
     case recent
-    case landscapes
-    case mountains
-    case cityscapes
-    case sunsets
-    case lakes
-    case forests
-    case waterfalls
-    case clouds
+    case popular
+    case nature
+    case city
+    case space
+    case abstract
+    case minimalism
+    case dark
+    case blackAndWhite
+    case macro
     case flowers
-    case architecture
+    case animals
+    case cars
+    case art
+    case fantasy
+    case threeD
+    case textures
+    case vector
+    case sport
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .recent: "Destaques"
-        case .landscapes: "Paisagens"
-        case .mountains: "Montanhas"
-        case .cityscapes: "Cidades"
-        case .sunsets: "Pôr do sol"
-        case .lakes: "Lagos"
-        case .forests: "Florestas"
-        case .waterfalls: "Cachoeiras"
-        case .clouds: "Céus"
+        case .recent: "Novidades"
+        case .popular: "Destaques"
+        case .nature: "Natureza"
+        case .city: "Cidades"
+        case .space: "Espaço"
+        case .abstract: "Abstrato"
+        case .minimalism: "Minimalismo"
+        case .dark: "Escuro"
+        case .blackAndWhite: "Preto e branco"
+        case .macro: "Macro"
         case .flowers: "Flores"
-        case .architecture: "Arquitetura"
+        case .animals: "Animais"
+        case .cars: "Carros"
+        case .art: "Arte"
+        case .fantasy: "Fantasia"
+        case .threeD: "3D"
+        case .textures: "Texturas"
+        case .vector: "Vetor"
+        case .sport: "Esporte"
         }
     }
 
     var icon: String {
         switch self {
-        case .recent: "star"
-        case .landscapes: "photo"
-        case .mountains: "mountain.2"
-        case .cityscapes: "building.2"
-        case .sunsets: "sunset"
-        case .lakes: "water.waves"
-        case .forests: "tree"
-        case .waterfalls: "drop"
-        case .clouds: "cloud"
-        case .flowers: "camera.macro"
-        case .architecture: "building.columns"
+        case .recent: "sparkle"
+        case .popular: "star"
+        case .nature: "leaf"
+        case .city: "building.2"
+        case .space: "moon.stars"
+        case .abstract: "scribble.variable"
+        case .minimalism: "circle.and.line.horizontal"
+        case .dark: "moon"
+        case .blackAndWhite: "circle.lefthalf.filled"
+        case .macro: "camera.macro"
+        case .flowers: "camera.filters"
+        case .animals: "pawprint"
+        case .cars: "car"
+        case .art: "paintpalette"
+        case .fantasy: "wand.and.stars"
+        case .threeD: "cube"
+        case .textures: "square.grid.3x3"
+        case .vector: "scribble"
+        case .sport: "figure.run"
         }
     }
 
-    var commonsCategory: String {
+    var wallcraftPath: String {
         switch self {
-        case .recent: "Category:Featured pictures on Wikimedia Commons"
-        case .landscapes: "Category:Featured pictures of landscapes"
-        case .mountains: "Category:Featured pictures of mountains"
-        case .cityscapes: "Category:Featured pictures of cityscapes"
-        case .sunsets: "Category:Featured pictures of sunsets"
-        case .lakes: "Category:Featured pictures of lakes"
-        case .forests: "Category:Featured pictures of forests"
-        case .waterfalls: "Category:Featured pictures of waterfalls"
-        case .clouds: "Category:Featured pictures of clouds"
-        case .flowers: "Category:Featured pictures of flowers"
-        case .architecture: "Category:Featured pictures of architecture"
+        case .recent: "all/date"
+        case .popular: "all"
+        case .nature: "catalog/nature"
+        case .city: "catalog/city"
+        case .space: "catalog/space"
+        case .abstract: "catalog/abstract"
+        case .minimalism: "catalog/minimalism"
+        case .dark: "catalog/dark"
+        case .blackAndWhite: "catalog/black_and_white"
+        case .macro: "catalog/macro"
+        case .flowers: "catalog/flowers"
+        case .animals: "catalog/animals"
+        case .cars: "catalog/cars"
+        case .art: "catalog/art"
+        case .fantasy: "catalog/fantasy"
+        case .threeD: "catalog/3d"
+        case .textures: "catalog/textures"
+        case .vector: "catalog/vector"
+        case .sport: "catalog/sport"
         }
     }
-
-    var sortsByRecency: Bool { self == .recent }
 }
 
 enum RotationSource: String, Codable, CaseIterable, Identifiable {
