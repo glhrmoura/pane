@@ -22,8 +22,9 @@ struct FeedPage: Sendable {
     let next: String?
 }
 
-struct CommonsClient: Sendable {
-    static let shared = CommonsClient()
+struct WallcraftClient: Sendable {
+    static let shared = WallcraftClient()
+    static let resolution = "3840x2160"
 
     let session: URLSession = {
         let configuration = URLSessionConfiguration.default
@@ -35,28 +36,27 @@ struct CommonsClient: Sendable {
     }()
 
     func page(category: WallCategory, continueToken: String?) async throws -> FeedPage {
-        var extra: [URLQueryItem] = []
-        if category.sortsByRecency {
-            extra += [URLQueryItem(name: "gcmsort", value: "timestamp"), URLQueryItem(name: "gcmdir", value: "desc")]
-        }
-        if let continueToken {
-            extra.append(URLQueryItem(name: "gcmcontinue", value: continueToken))
-        }
-        return try await query(category: category, extra: extra)
+        let number = continueToken.flatMap(Int.init) ?? 1
+        let listing = try await listing(category: category, page: number)
+        let hasMore = !listing.items.isEmpty && number < listing.lastPage
+        return FeedPage(items: listing.items, next: hasMore ? String(number + 1) : nil)
     }
 
     func randomSlice(category: WallCategory) async throws -> [Wallpaper] {
-        let start = Date(timeIntervalSince1970: 1_230_768_000)
-        let end = Date().addingTimeInterval(-30 * 86_400)
-        let pick = Date(timeIntervalSince1970: .random(in: start.timeIntervalSince1970...end.timeIntervalSince1970))
-        let stamp = ISO8601DateFormatter().string(from: pick)
-        let slice = try await query(category: category, extra: [
-            URLQueryItem(name: "gcmsort", value: "timestamp"),
-            URLQueryItem(name: "gcmdir", value: "newer"),
-            URLQueryItem(name: "gcmstart", value: stamp),
-        ])
-        if !slice.items.isEmpty { return slice.items }
-        return try await page(category: category, continueToken: nil).items
+        let first = try await listing(category: category, page: 1)
+        let last = min(first.lastPage, 300)
+        guard last > 1 else { return first.items }
+        let slice = try await listing(category: category, page: .random(in: 2...last))
+        return slice.items.isEmpty ? first.items : slice.items
+    }
+
+    func credit(for wallpaper: Wallpaper) async throws -> (author: String, license: String) {
+        var request = URLRequest(url: wallpaper.pageURL)
+        request.cachePolicy = .returnCacheDataElseLoad
+        let html = try await text(for: request)
+        let author = Self.firstMatch(#"author__row">\s*Author:\s*([^<]+)<"#, in: html) ?? ""
+        let license = Self.firstMatch(#"author__row">\s*License:\s*([^<]*)<"#, in: html) ?? ""
+        return (author, license)
     }
 
     func fetch(_ url: URL) async throws -> Data {
@@ -67,61 +67,63 @@ struct CommonsClient: Sendable {
         return data
     }
 
-    private func query(category: WallCategory, extra: [URLQueryItem]) async throws -> FeedPage {
-        var components = URLComponents(string: "https://commons.wikimedia.org/w/api.php")!
-        components.queryItems = [
-            URLQueryItem(name: "action", value: "query"),
-            URLQueryItem(name: "format", value: "json"),
-            URLQueryItem(name: "formatversion", value: "2"),
-            URLQueryItem(name: "generator", value: "categorymembers"),
-            URLQueryItem(name: "gcmtitle", value: category.commonsCategory),
-            URLQueryItem(name: "gcmtype", value: "file"),
-            URLQueryItem(name: "gcmlimit", value: "50"),
-            URLQueryItem(name: "prop", value: "imageinfo"),
-            URLQueryItem(name: "iiprop", value: "url|size|mime|extmetadata"),
-            URLQueryItem(name: "iiextmetadatafilter", value: "Artist|LicenseShortName|ObjectName"),
-            URLQueryItem(name: "iiurlwidth", value: "960"),
-        ] + extra
-        var request = URLRequest(url: components.url!)
+    private func listing(category: WallCategory, page: Int) async throws -> (items: [Wallpaper], lastPage: Int) {
+        var path = "https://wallpaperscraft.com/\(category.wallcraftPath)/\(Self.resolution)"
+        if page > 1 { path += "/page\(page)" }
+        var request = URLRequest(url: URL(string: path)!)
         request.cachePolicy = .reloadIgnoringLocalCacheData
+        let html = try await text(for: request)
+        let items = Self.wallpapers(in: html)
+        let pages = Self.allMatches(#"/page(\d+)""#, in: html).compactMap(Int.init)
+        return (items, max(pages.max() ?? page, page))
+    }
+
+    private func text(for request: URLRequest) async throws -> String {
         let (data, response) = try await session.data(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             throw ServiceError.badResponse(http.statusCode)
         }
-        let decoded = try JSONDecoder().decode(CommonsResponse.self, from: data)
-        let items = (decoded.query?.pages ?? []).compactMap(Self.wallpaper(from:))
-        return FeedPage(items: items, next: decoded.continuation?.gcmcontinue)
+        return String(decoding: data, as: UTF8.self)
     }
 
-    private static func wallpaper(from page: CommonsResponse.Page) -> Wallpaper? {
-        guard let info = page.imageinfo?.first,
-              ["image/jpeg", "image/png"].contains(info.mime ?? ""),
-              info.width >= 1600,
-              info.height > 0 else { return nil }
-        let ratio = Double(info.width) / Double(info.height)
-        guard (1.2...2.6).contains(ratio),
-              let original = cleanURL(info.url),
-              let pageURL = URL(string: info.descriptionurl) else { return nil }
-        let title = info.extmetadata?["ObjectName"]?.value.map(plainText)
-            ?? page.title.replacingOccurrences(of: "File:", with: "")
-        let author = info.extmetadata?["Artist"]?.value.map(plainText) ?? "Autor desconhecido"
-        return Wallpaper(
-            id: String(page.pageid),
-            title: title.isEmpty ? page.title : title,
-            author: author.isEmpty ? "Autor desconhecido" : author,
-            license: info.extmetadata?["LicenseShortName"]?.value.map(plainText) ?? "",
-            width: info.width,
-            height: info.height,
-            originalURL: original,
-            thumbnailBase: info.thumburl.flatMap(cleanURL),
-            pageURL: pageURL
-        )
+    private static func wallpapers(in html: String) -> [Wallpaper] {
+        let pattern = #"href="/download/([a-z0-9_]+)/(\d+)x(\d+)".*?wallpapers__info">([^<]+)</span>"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else { return [] }
+        let range = NSRange(html.startIndex..., in: html)
+        return regex.matches(in: html, range: range).compactMap { match in
+            guard let slugRange = Range(match.range(at: 1), in: html),
+                  let widthRange = Range(match.range(at: 2), in: html),
+                  let heightRange = Range(match.range(at: 3), in: html),
+                  let tagsRange = Range(match.range(at: 4), in: html),
+                  let width = Int(html[widthRange]),
+                  let height = Int(html[heightRange]) else { return nil }
+            let slug = String(html[slugRange])
+            let tags = plainText(String(html[tagsRange]))
+            guard let original = URL(string: "https://images.wallpaperscraft.com/image/single/\(slug)_\(width)x\(height).jpg"),
+                  let page = URL(string: "https://wallpaperscraft.com/wallpaper/\(slug)") else { return nil }
+            return Wallpaper(
+                id: slug,
+                title: tags.prefix(1).uppercased() + tags.dropFirst(),
+                author: "",
+                license: "",
+                width: width,
+                height: height,
+                originalURL: original,
+                thumbnailBase: nil,
+                pageURL: page
+            )
+        }
     }
 
-    private static func cleanURL(_ string: String) -> URL? {
-        guard var components = URLComponents(string: string) else { return nil }
-        components.query = nil
-        return components.url
+    private static func firstMatch(_ pattern: String, in text: String) -> String? {
+        allMatches(pattern, in: text).first.map(plainText).flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    private static func allMatches(_ pattern: String, in text: String) -> [String] {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        return regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap {
+            Range($0.range(at: 1), in: text).map { String(text[$0]) }
+        }
     }
 
     private static func plainText(_ html: String) -> String {
@@ -132,51 +134,6 @@ struct CommonsClient: Sendable {
         }
         text = text.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-}
-
-private struct CommonsResponse: Decodable {
-    struct Continuation: Decodable {
-        let gcmcontinue: String?
-    }
-
-    struct Meta: Decodable {
-        let value: String?
-
-        init(from decoder: Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            value = try? container.decode(String.self, forKey: .value)
-        }
-
-        enum CodingKeys: String, CodingKey { case value }
-    }
-
-    struct Info: Decodable {
-        let url: String
-        let thumburl: String?
-        let width: Int
-        let height: Int
-        let mime: String?
-        let descriptionurl: String
-        let extmetadata: [String: Meta]?
-    }
-
-    struct Page: Decodable {
-        let pageid: Int
-        let title: String
-        let imageinfo: [Info]?
-    }
-
-    struct Query: Decodable {
-        let pages: [Page]?
-    }
-
-    let query: Query?
-    let continuation: Continuation?
-
-    enum CodingKeys: String, CodingKey {
-        case query
-        case continuation = "continue"
     }
 }
 
@@ -194,7 +151,7 @@ actor ImagePipeline {
         if let cached = cache.object(forKey: url as NSURL) { return cached }
         if let running = inFlight[url] { return try await running.value }
         let task = Task<NSImage, Error> {
-            let data = try await CommonsClient.shared.fetch(url)
+            let data = try await WallcraftClient.shared.fetch(url)
             guard let image = NSImage(data: data) else { throw ServiceError.undecodableImage }
             return image
         }
@@ -262,7 +219,7 @@ enum DesktopService {
         let screens = allScreens ? NSScreen.screens : [NSScreen.main].compactMap { $0 }
         guard !screens.isEmpty else { throw ServiceError.noScreen }
         let widest = screens.map { pixelSize(of: $0).0 }.max() ?? 1920
-        let raw = try await CommonsClient.shared.fetch(wallpaper.url(forWidth: widest))
+        let raw = try await WallcraftClient.shared.fetch(wallpaper.url(forWidth: widest))
         let data = try await Task.detached(priority: .userInitiated) {
             try ImageProcessor.render(raw, filters: filters)
         }.value
@@ -281,7 +238,7 @@ enum DesktopService {
 
     static func save(_ wallpaper: Wallpaper, size: ExportSize, filters: ImageFilters) async throws -> URL {
         let width = size.targetWidth(for: wallpaper)
-        let raw = try await CommonsClient.shared.fetch(wallpaper.url(forWidth: width))
+        let raw = try await WallcraftClient.shared.fetch(wallpaper.url(forWidth: width))
         let data = try await Task.detached(priority: .userInitiated) {
             try ImageProcessor.render(raw, filters: filters)
         }.value
