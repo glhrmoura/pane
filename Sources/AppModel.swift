@@ -11,6 +11,7 @@ private struct StoredState: Codable {
     var rotationMinutes = 30
     var rotationSource: RotationSource = .favorites
     var rotationCategory: WallCategory?
+    var nextRotation: Date?
 }
 
 extension StoredState {
@@ -24,6 +25,7 @@ extension StoredState {
         rotationMinutes = (try? container.decode(Int.self, forKey: .rotationMinutes)) ?? 30
         rotationSource = (try? container.decode(RotationSource.self, forKey: .rotationSource)) ?? .favorites
         rotationCategory = try? container.decode(WallCategory.self, forKey: .rotationCategory)
+        nextRotation = try? container.decode(Date.self, forKey: .nextRotation)
     }
 }
 
@@ -46,7 +48,7 @@ final class AppModel {
     var selection: Wallpaper?
     var busyIDs: Set<String> = []
     var toast: String?
-    var nextRotation: Date?
+    var nextRotation: Date? { didSet { persist() } }
     var isTurning = false
     var credits: [String: Wallpaper] = [:]
 
@@ -74,8 +76,8 @@ final class AppModel {
     }
 
     init() {
-        restore()
-        scheduleRotation()
+        let saved = restore()
+        scheduleRotation(resumingAt: saved)
         Task { await loadMore() }
     }
 
@@ -229,7 +231,8 @@ final class AppModel {
         return pick(feed.items)
     }
 
-    private func scheduleRotation() {
+    private func scheduleRotation(resumingAt saved: Date? = nil) {
+        guard !restoring else { return }
         rotationTask?.cancel()
         rotationTask = nil
         nextRotation = nil
@@ -246,20 +249,26 @@ final class AppModel {
         }
         let interval = TimeInterval(max(rotationMinutes, 1) * 60)
         let lead = min(60, interval / 2)
-        let first = Self.startOfMinute(Date()).addingTimeInterval(interval)
+        let first = saved ?? Self.startOfMinute(Date()).addingTimeInterval(interval)
         nextRotation = first
         rotationTask = Task { [weak self] in
             var target = first
             while !Task.isCancelled {
                 await Self.sleep(until: target.addingTimeInterval(-lead))
                 guard !Task.isCancelled, let self else { return }
-                let prepared = await self.prepareTurn()
+                var prepared = await self.prepareTurn()
                 await Self.sleep(until: target)
+                var attempts = 0
+                while prepared == nil, attempts < 8, !Task.isCancelled {
+                    attempts += 1
+                    try? await Task.sleep(for: .seconds(15))
+                    prepared = await self.prepareTurn()
+                }
                 guard !Task.isCancelled else { return }
                 if let prepared {
-                    await self.commit(prepared, date: target)
+                    await self.commit(prepared)
                 } else {
-                    await self.applyRandom()
+                    self.flash("Não foi possível trocar o papel de parede")
                 }
                 let now = Date()
                 repeat { target.addTimeInterval(interval) } while target <= now
@@ -275,10 +284,10 @@ final class AppModel {
         return (pick, file)
     }
 
-    private func commit(_ prepared: (wallpaper: Wallpaper, file: URL), date: Date) async {
+    private func commit(_ prepared: (wallpaper: Wallpaper, file: URL)) async {
         do {
             try DesktopService.show(prepared.file, allScreens: applyToAllScreens)
-            await record(prepared.wallpaper, filters: ImageFilters(), date: date)
+            await record(prepared.wallpaper, filters: ImageFilters(), date: Date())
         } catch {
             flash("Falha ao aplicar: \(error.localizedDescription)")
         }
@@ -303,9 +312,9 @@ final class AppModel {
         }
     }
 
-    private func restore() {
+    private func restore() -> Date? {
         guard let data = try? Data(contentsOf: stateFile),
-              let state = try? JSONDecoder().decode(StoredState.self, from: data) else { return }
+              let state = try? JSONDecoder().decode(StoredState.self, from: data) else { return nil }
         restoring = true
         favorites = state.favorites
         history = state.history
@@ -316,6 +325,7 @@ final class AppModel {
         rotationEnabled = state.rotationEnabled
         restoring = false
         category = state.category
+        return state.rotationEnabled ? state.nextRotation : nil
     }
 
     private func persist() {
@@ -328,7 +338,8 @@ final class AppModel {
             rotationEnabled: rotationEnabled,
             rotationMinutes: rotationMinutes,
             rotationSource: rotationSource,
-            rotationCategory: rotationCategory
+            rotationCategory: rotationCategory,
+            nextRotation: nextRotation
         )
         do {
             try FileManager.default.createDirectory(at: DesktopService.supportDirectory, withIntermediateDirectories: true)
