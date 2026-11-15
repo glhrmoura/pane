@@ -18,9 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if launchedAtLogin {
             NSApp.setActivationPolicy(.accessory)
             DispatchQueue.main.async {
-                for window in NSApp.windows where window.canBecomeMain {
-                    window.close()
-                }
+                Self.mainWindow?.orderOut(nil)
             }
         } else {
             NSApp.setActivationPolicy(.regular)
@@ -40,9 +38,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         NSApp.setActivationPolicy(.regular)
-        if !flag { AppDelegate.openMainWindow?() }
+        if !flag {
+            if let window = Self.mainWindow {
+                window.makeKeyAndOrderFront(nil)
+            } else {
+                AppDelegate.openMainWindow?()
+            }
+        }
         NSApp.activate(ignoringOtherApps: true)
         return false
+    }
+
+    private static var mainWindow: NSWindow? {
+        NSApp.windows.first { $0.identifier?.rawValue.hasPrefix("main") == true }
+            ?? NSApp.windows.first { $0.canBecomeMain && $0.title == "Pane" }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
