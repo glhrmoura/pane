@@ -45,7 +45,7 @@ struct SettingsView: View {
             }
         }
         .frame(width: 520, height: 500)
-        .navigationTitle("Ajustes do Pane")
+        .navigationTitle("Configurações")
     }
 }
 
