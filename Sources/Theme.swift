@@ -32,12 +32,12 @@ private extension NSColor {
 }
 
 enum Typeface {
-    static let family = "Big Shoulders Display"
+    static let family = "Outfit"
     private static let weightAxis = 2_003_265_652
 
     static func register() {
-        guard let url = Bundle.main.url(forResource: "BigShouldersDisplay", withExtension: "ttf", subdirectory: "Fonts")
-            ?? Bundle.main.url(forResource: "BigShouldersDisplay", withExtension: "ttf") else { return }
+        guard let url = Bundle.main.url(forResource: "Outfit", withExtension: "ttf", subdirectory: "Fonts")
+            ?? Bundle.main.url(forResource: "Outfit", withExtension: "ttf") else { return }
         CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
     }
 
@@ -50,9 +50,24 @@ enum Typeface {
         ] as CFDictionary)
         let font = CTFontCreateWithFontDescriptor(varied, size, nil)
         if (CTFontCopyFamilyName(font) as String) != family {
-            return .system(size: size, weight: .black).width(.compressed)
+            return .system(size: size, weight: .black)
         }
         return Font(font)
+    }
+
+    static func text(_ size: CGFloat, _ weight: Font.Weight) -> Font {
+        let value: CGFloat = switch weight {
+        case .ultraLight: 200
+        case .thin: 100
+        case .light: 300
+        case .medium: 500
+        case .semibold: 600
+        case .bold: 700
+        case .heavy: 800
+        case .black: 900
+        default: 400
+        }
+        return display(size, weight: value)
     }
 }
 
@@ -61,10 +76,14 @@ extension Font {
         Typeface.display(size, weight: weight)
     }
 
-    static let caption1 = Font.system(size: 12, weight: .regular)
-    static let captionStrong = Font.system(size: 12, weight: .semibold)
-    static let label = Font.system(size: 13, weight: .medium)
-    static let figures = Font.system(size: 11, weight: .semibold).monospacedDigit()
+    static func ui(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        Typeface.text(size, weight)
+    }
+
+    static let caption1 = Font.ui(12)
+    static let captionStrong = Font.ui(12, .semibold)
+    static let label = Font.ui(13, .medium)
+    static let figures = Font.ui(11, .semibold).monospacedDigit()
 }
 
 struct InkButtonStyle: ButtonStyle {
@@ -73,7 +92,7 @@ struct InkButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 14, weight: .semibold))
+            .font(.ui(14, .semibold))
             .padding(.horizontal, 18)
             .frame(height: 38)
             .foregroundStyle(prominent ? Palette.paper : Palette.ink)
@@ -95,7 +114,7 @@ struct TextOption: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 12, weight: selected ? .semibold : .regular))
+                .font(.ui(12, .medium))
                 .foregroundStyle(selected ? Palette.ink : (hovering ? Palette.ink : Palette.inkSoft))
                 .padding(.vertical, 4)
                 .overlay(alignment: .bottom) {
@@ -146,7 +165,7 @@ struct PaperSlip: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 13, weight: .medium))
+            .font(.ui(13, .medium))
             .foregroundStyle(Palette.ink)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
@@ -194,5 +213,101 @@ struct PointingHand: ViewModifier {
 extension View {
     func pointingHand(_ enabled: Bool = true) -> some View {
         modifier(PointingHand(enabled: enabled))
+    }
+}
+
+final class InkScroller: NSScroller {
+    private static let ink = NSColor(name: nil) { appearance in
+        let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        return NSColor(hex: isDark ? 0xECECE8 : 0x111214)
+    }
+
+    private var hovering = false {
+        didSet { if hovering != oldValue { needsDisplay = true } }
+    }
+
+    override class var isCompatibleWithOverlayScrollers: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        drawKnob()
+    }
+
+    override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {}
+
+    override func drawKnob() {
+        let knob = rect(for: .knob)
+        guard knob.height > 0 else { return }
+        let active = hovering || hitPart == .knob
+        let thickness: CGFloat = active ? 5 : 3
+        let bar = NSRect(
+            x: bounds.maxX - thickness - 3,
+            y: knob.minY + 3,
+            width: thickness,
+            height: max(knob.height - 6, 12)
+        )
+        Self.ink.withAlphaComponent(active ? 0.55 : 0.3).setFill()
+        bar.fill()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self
+        ))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        hovering = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        hovering = false
+    }
+}
+
+private struct InkScrollerInstaller: NSViewRepresentable {
+    func makeNSView(context: Context) -> Probe { Probe() }
+    func updateNSView(_ nsView: Probe, context: Context) {}
+
+    final class Probe: NSView {
+        private var observer: NSObjectProtocol?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            DispatchQueue.main.async { [weak self] in self?.install() }
+            guard observer == nil else { return }
+            observer = NotificationCenter.default.addObserver(
+                forName: NSScroller.preferredScrollerStyleDidChangeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.install() }
+            }
+        }
+
+        deinit {
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+        }
+
+        private func install() {
+            guard let scrollView = enclosingScrollView else { return }
+            if !(scrollView.verticalScroller is InkScroller) {
+                scrollView.verticalScroller = InkScroller()
+            }
+            scrollView.scrollerStyle = .overlay
+            scrollView.autohidesScrollers = true
+            scrollView.hasHorizontalScroller = false
+        }
+    }
+}
+
+extension View {
+    func inkScroller() -> some View {
+        background(InkScrollerInstaller())
     }
 }
