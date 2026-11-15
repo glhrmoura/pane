@@ -41,6 +41,7 @@ struct SettingsView: View {
                 .padding(.top, 22)
                 .padding(.bottom, 28)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .inkScroller()
             }
         }
         .frame(width: 520, height: 500)
@@ -60,7 +61,7 @@ struct SettingsTabBar: View {
                     withAnimation(.spring(duration: 0.3, bounce: 0.15)) { selection = item }
                 } label: {
                     Label(item.title, systemImage: item.icon)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.ui(13, .semibold))
                         .foregroundStyle(selected ? Color.primary : Color.secondary)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 7)
@@ -159,7 +160,7 @@ struct SettingsSection<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.system(size: 15, weight: .bold))
+                .font(.ui(15, .bold))
                 .padding(.leading, 4)
             VStack(spacing: 0) {
                 content
@@ -194,16 +195,16 @@ struct SettingsRow<Accessory: View>: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.ui(15, .semibold))
                 .foregroundStyle(.white)
                 .frame(width: 32, height: 32)
                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(tint.gradient))
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.ui(14, .medium))
                 if let subtitle {
                     Text(subtitle)
-                        .font(.system(size: 12))
+                        .font(.ui(12))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -225,6 +226,27 @@ func intervalLabel(_ minutes: Int) -> String {
     case 60: "1 hora"
     case 1440: "1 dia"
     default: "\(minutes / 60) horas"
+    }
+}
+
+func intervalShortLabel(_ minutes: Int) -> String {
+    switch minutes {
+    case ..<60: "\(minutes) min"
+    case 1440: "1 dia"
+    default: "\(minutes / 60) h"
+    }
+}
+
+func intervalIcon(_ minutes: Int) -> String {
+    switch minutes {
+    case ..<15: "hare"
+    case ..<30: "timer"
+    case ..<60: "cup.and.saucer"
+    case ..<120: "hourglass"
+    case ..<360: "hourglass.bottomhalf.filled"
+    case ..<720: "sun.max"
+    case ..<1440: "moon.stars"
+    default: "sunrise"
     }
 }
 
