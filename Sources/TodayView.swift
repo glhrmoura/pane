@@ -191,7 +191,7 @@ struct ScheduleGrid: View {
                     }
                 }
             }
-            .overlay(Rectangle().strokeBorder(Palette.ink, lineWidth: 1.2))
+            .overlay(Rectangle().strokeBorder(Palette.ink, lineWidth: 2))
             HStack(alignment: .firstTextBaseline, spacing: 28) {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     Text("A cada")
