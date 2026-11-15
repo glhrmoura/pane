@@ -5,6 +5,10 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static var openMainWindow: (() -> Void)?
 
+    static func register(_ open: @escaping () -> Void) {
+        openMainWindow = open
+    }
+
     private var launchedAtLogin = false
 
     func applicationWillFinishLaunching(_ notification: Notification) {
@@ -115,6 +119,9 @@ struct PaneApp: App {
                 }
                 .keyboardShortcut("q", modifiers: [.command, .option])
             }
+            CommandGroup(before: .windowList) {
+                ShowMainWindowButton()
+            }
             CommandGroup(after: .newItem) {
                 Button("Papel de parede aleatório") {
                     Task { await model.applyRandom() }
@@ -127,5 +134,19 @@ struct PaneApp: App {
             SettingsView()
                 .environment(model)
         }
+    }
+}
+
+struct ShowMainWindowButton: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        let _ = AppDelegate.register { [openWindow] in openWindow(id: "main") }
+        Button("Mostrar o Pane") {
+            NSApp.setActivationPolicy(.regular)
+            openWindow(id: "main")
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        .keyboardShortcut("0", modifiers: .command)
     }
 }
