@@ -9,12 +9,13 @@ INSTALL_DIR = /Applications
 
 all: $(BUNDLE)
 
-$(BUNDLE): $(SOURCES) Resources/Info.plist Resources/AppIcon.icns $(wildcard Resources/Fonts/*)
+$(BUNDLE): $(SOURCES) Resources/Info.plist Resources/AppIcon.icns $(wildcard Resources/Fonts/*) $(wildcard Resources/pt-BR.lproj/*)
 	rm -rf $(BUNDLE)
 	mkdir -p $(BUNDLE)/Contents/MacOS $(BUNDLE)/Contents/Resources
 	swiftc -parse-as-library -O -swift-version 5 -target $(ARCH)-apple-macos14.0 $(SOURCES) -o $(BUNDLE)/Contents/MacOS/$(APP)
 	cp Resources/Info.plist $(BUNDLE)/Contents/Info.plist
 	cp -R Resources/Fonts $(BUNDLE)/Contents/Resources/Fonts
+	cp -R Resources/pt-BR.lproj $(BUNDLE)/Contents/Resources/pt-BR.lproj
 	cp Resources/AppIcon.icns $(BUNDLE)/Contents/Resources/AppIcon.icns
 	codesign --force --sign - $(BUNDLE)
 
