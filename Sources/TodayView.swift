@@ -8,16 +8,13 @@ struct TodayView: View {
         VStack(alignment: .leading, spacing: 0) {
             CurrentPage(openCatalog: openCatalog)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            CreditLine()
-                .padding(.horizontal, 28)
-                .padding(.top, 10)
             HStack(alignment: .top, spacing: 40) {
                 NextChangeBlock()
                     .frame(width: 330, alignment: .leading)
                 ScheduleGrid()
             }
             .padding(.horizontal, 28)
-            .padding(.top, 22)
+            .padding(.top, 30)
             .padding(.bottom, 26)
         }
     }
@@ -36,6 +33,10 @@ struct CurrentPage: View {
                     .transition(.pageTurn)
                     .onTapGesture { model.selection = entry.wallpaper }
                     .pointingHand()
+                    .overlay(alignment: .bottom) {
+                        CreditLine(entry: entry)
+                            .allowsHitTesting(false)
+                    }
             } else {
                 VStack(spacing: 14) {
                     Text("Nenhum papel de parede ainda")
@@ -56,35 +57,34 @@ struct CurrentPage: View {
 }
 
 struct CreditLine: View {
-    @Environment(AppModel.self) private var model
+    let entry: HistoryEntry
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            if let entry = model.current {
-                Text(entry.wallpaper.title)
-                    .font(.captionStrong)
-                    .foregroundStyle(Palette.ink)
-                    .lineLimit(1)
-                Text(credit(entry.wallpaper))
-                    .font(.caption1)
-                    .foregroundStyle(Palette.inkSoft)
-                    .lineLimit(1)
-                Spacer(minLength: 16)
-                Text("aplicado às \(entry.date.formatted(date: .omitted, time: .shortened))")
-                    .font(.caption1)
-                    .foregroundStyle(Palette.inkSoft)
-            } else {
-                Text("Papéis de parede do Wallcraft em 4K.")
-                    .font(.caption1)
-                    .foregroundStyle(Palette.inkSoft)
-                Spacer()
-            }
+            Text(entry.wallpaper.title)
+                .font(.captionStrong)
+                .foregroundStyle(.white)
+                .lineLimit(1)
+            Text(entry.wallpaper.credit)
+                .font(.caption1)
+                .foregroundStyle(.white.opacity(0.75))
+                .lineLimit(1)
+            Spacer(minLength: 16)
+            Text("Aplicado às \(entry.date.formatted(date: .omitted, time: .shortened))")
+                .font(.caption1)
+                .foregroundStyle(.white.opacity(0.75))
         }
-        .frame(height: 16)
-    }
-
-    private func credit(_ wallpaper: Wallpaper) -> String {
-        wallpaper.credit
+        .shadow(color: .black.opacity(0.35), radius: 4, y: 1)
+        .padding(.horizontal, 28)
+        .padding(.top, 40)
+        .padding(.bottom, 14)
+        .background(
+            LinearGradient(
+                colors: [.black.opacity(0), .black.opacity(0.65)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
     }
 }
 
@@ -93,18 +93,26 @@ struct NextChangeBlock: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 20)) { context in
+            let label = overline(now: context.date)
             VStack(alignment: .leading, spacing: 0) {
+                if let label {
+                    Text(label)
+                        .font(.ui(14, .medium))
+                        .foregroundStyle(Palette.inkSoft)
+                }
                 Text(headline(now: context.date))
                     .font(.display(132, weight: 850))
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
-                    .padding(.top, -24)
+                    .padding(.top, label == nil ? -24 : -12)
                     .padding(.bottom, -14)
                     .contentTransition(.numericText())
-                Text(subtitle(now: context.date))
-                    .font(.ui(14, .medium))
-                    .foregroundStyle(Palette.inkSoft)
+                if label == nil {
+                    Text("Troca automática desligada. Troque o papel de parede quando quiser.")
+                        .font(.ui(14, .medium))
+                        .foregroundStyle(Palette.inkSoft)
+                }
                 HStack(spacing: 10) {
                     let busy = model.current.map { model.busyIDs.contains($0.wallpaper.id) } ?? false
                     Button {
@@ -143,16 +151,9 @@ struct NextChangeBlock: View {
         return now.formatted(.dateTime.day(.twoDigits))
     }
 
-    private func subtitle(now: Date) -> String {
-        guard model.rotationEnabled, let next = model.nextRotation else {
-            return "Troca automática desligada. Troque o papel de parede quando quiser."
-        }
-        let minutes = max(Int(next.timeIntervalSince(now) / 60), 0)
-        if minutes < 1 { return "Próxima troca em instantes" }
-        if minutes < 60 { return "Próxima troca em \(minutes) min" }
-        let hours = minutes / 60
-        let rest = minutes % 60
-        return rest == 0 ? "Próxima troca em \(hours) h" : "Próxima troca em \(hours) h \(rest) min"
+    private func overline(now: Date) -> String? {
+        guard model.rotationEnabled, let next = model.nextRotation else { return nil }
+        return Calendar.current.isDate(next, inSameDayAs: now) ? "Próxima troca às" : "Próxima troca amanhã às"
     }
 }
 
