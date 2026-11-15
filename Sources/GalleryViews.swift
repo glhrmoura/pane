@@ -18,7 +18,7 @@ struct RemoteImage: View {
                         .transition(.opacity)
                 } else if failed {
                     Image(systemName: "photo")
-                        .font(.system(size: 18, weight: .light))
+                        .font(.ui(18, .light))
                         .foregroundStyle(Palette.inkFaint)
                 }
             }
@@ -48,25 +48,27 @@ struct PageGrid<Footer: View>: View {
 
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 30) {
-                ForEach(items) { wallpaper in
-                    PageCard(
-                        wallpaper: wallpaper,
-                        filters: filters?(wallpaper) ?? ImageFilters(),
-                        caption: caption?(wallpaper)
-                    )
-                    .onAppear {
-                        if wallpaper.id == items.last?.id { onReachEnd?() }
+            VStack(spacing: 0) {
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 30) {
+                    ForEach(items) { wallpaper in
+                        PageCard(
+                            wallpaper: wallpaper,
+                            filters: filters?(wallpaper) ?? ImageFilters(),
+                            caption: caption?(wallpaper)
+                        )
+                        .onAppear {
+                            if wallpaper.id == items.last?.id { onReachEnd?() }
+                        }
                     }
                 }
+                .padding(.horizontal, 28)
+                .padding(.top, 22)
+                footer()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 30)
             }
-            .padding(.horizontal, 28)
-            .padding(.top, 22)
-            footer()
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 30)
+            .inkScroller()
         }
-        .scrollIndicators(.automatic)
     }
 }
 
@@ -117,11 +119,11 @@ struct PageCard: View {
                     .lineLimit(1)
                 if favorite {
                     Image(systemName: "heart.fill")
-                        .font(.system(size: 9))
+                        .font(.ui(9))
                         .foregroundStyle(Palette.ink)
                 }
             }
-            Text(caption ?? wallpaper.author)
+            Text(caption ?? (wallpaper.author.isEmpty ? wallpaper.resolutionLabel : wallpaper.author))
                 .font(.caption1)
                 .foregroundStyle(Palette.inkSoft)
                 .lineLimit(1)
@@ -141,7 +143,7 @@ struct PageCard: View {
                 }
             }
             Divider()
-            Link("Ver no Wikimedia Commons", destination: wallpaper.pageURL)
+            Link("Ver no \(wallpaper.sourceName)", destination: wallpaper.pageURL)
         }
     }
 }
@@ -155,7 +157,7 @@ struct ChipButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.ui(12, .semibold))
                 .foregroundStyle(hovering ? Palette.paper : Palette.ink)
                 .frame(width: 30, height: 28)
                 .background(hovering ? Palette.ink : Color.clear)
@@ -203,7 +205,7 @@ struct BlankPage: View {
                 .font(.display(36))
                 .foregroundStyle(Palette.ink)
             Text(message)
-                .font(.system(size: 14))
+                .font(.ui(14))
                 .foregroundStyle(Palette.inkSoft)
                 .frame(maxWidth: 420, alignment: .leading)
             if let actionTitle, let action {
@@ -227,18 +229,18 @@ struct CatalogView: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.ui(12, .medium))
                         .foregroundStyle(Palette.inkFaint)
                     TextField("Título ou autor", text: $model.searchText)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 13))
+                        .font(.ui(13))
                         .foregroundStyle(Palette.ink)
                     if !model.searchText.isEmpty {
                         Button {
                             model.searchText = ""
                         } label: {
                             Image(systemName: "xmark")
-                                .font(.system(size: 10, weight: .bold))
+                                .font(.ui(10, .bold))
                                 .foregroundStyle(Palette.inkSoft)
                         }
                         .buttonStyle(.plain)
@@ -283,7 +285,7 @@ struct CategoryIndexRow: View {
         } label: {
             HStack(alignment: .firstTextBaseline) {
                 Text(item.title)
-                    .font(.display(25, weight: selected ? 850 : 500))
+                    .font(.display(25, weight: 600))
                     .foregroundStyle(selected || hovering ? Palette.ink : Palette.inkSoft)
                 Spacer()
                 if selected, model.feed.items.count > 0 {
@@ -319,7 +321,7 @@ struct CatalogGrid: View {
             if items.isEmpty, let error = feed.error {
                 BlankPage(
                     title: "O catálogo não carregou",
-                    message: "O Wikimedia Commons não respondeu: \(error) Confira sua conexão e tente de novo.",
+                    message: "O Wallcraft não respondeu: \(error) Confira sua conexão e tente de novo.",
                     actionTitle: "Tentar de novo",
                     action: { Task { await model.reload() } }
                 )
@@ -397,7 +399,7 @@ struct HistoryView: View {
                     filters: { entries[$0.id]?.filters ?? ImageFilters() },
                     caption: { wallpaper in
                         entries[wallpaper.id].map {
-                            "\($0.date.formatted(.relative(presentation: .named))) · \(wallpaper.author)"
+                            [$0.date.formatted(.relative(presentation: .named)), wallpaper.author].filter { !$0.isEmpty }.joined(separator: " · ")
                         }
                     }
                 ) { EmptyView() }
