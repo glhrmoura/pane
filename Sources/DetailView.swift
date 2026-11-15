@@ -25,7 +25,7 @@ struct DetailView: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.ui(12, .bold))
                             .foregroundStyle(Palette.ink)
                             .frame(width: 30, height: 30)
                             .background(Palette.paper.opacity(0.85))
@@ -50,14 +50,14 @@ struct DetailView: View {
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(credit)
-                        .font(.system(size: 13))
+                        .font(.ui(13))
                         .foregroundStyle(Palette.inkSoft)
                         .lineLimit(2)
                     Link(destination: wallpaper.pageURL) {
                         HStack(spacing: 4) {
-                            Text("Ver no Wikimedia Commons")
+                            Text("Ver no \(wallpaper.sourceName)")
                             Image(systemName: "arrow.up.right")
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(.ui(10, .semibold))
                         }
                         .font(.label)
                         .foregroundStyle(Palette.ink)
@@ -114,6 +114,7 @@ struct DetailView: View {
                 return nil
             }
         }
+        .task { _ = await model.withCredit(wallpaper) }
         .onDisappear {
             if let closeMonitor { NSEvent.removeMonitor(closeMonitor) }
             closeMonitor = nil
@@ -121,8 +122,9 @@ struct DetailView: View {
     }
 
     private var credit: String {
-        var parts = ["Foto de \(wallpaper.author)", wallpaper.resolutionLabel]
-        if !wallpaper.license.isEmpty { parts.insert(wallpaper.license, at: 1) }
+        let known = model.credits[wallpaper.id] ?? wallpaper
+        var parts = [known.author.isEmpty ? "Via \(known.sourceName)" : "Foto de \(known.author)", known.resolutionLabel]
+        if !known.license.isEmpty { parts.insert(known.license, at: 1) }
         if filters.isActive { parts.append("com filtros") }
         return parts.joined(separator: " · ")
     }
