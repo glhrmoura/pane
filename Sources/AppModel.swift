@@ -66,6 +66,7 @@ final class AppModel {
 
     @ObservationIgnored private var restoring = false
     @ObservationIgnored private var rotationTask: Task<Void, Never>?
+    @ObservationIgnored private var rotationActivity: NSObjectProtocol?
     @ObservationIgnored private let client = WallcraftClient.shared
 
     private var stateFile: URL {
@@ -169,14 +170,18 @@ final class AppModel {
         defer { busyIDs.remove(wallpaper.id) }
         do {
             try await DesktopService.apply(wallpaper, filters: used, allScreens: applyToAllScreens)
-            let credited = await withCredit(wallpaper)
-            history.removeAll { $0.wallpaper.id == wallpaper.id }
-            history.insert(HistoryEntry(wallpaper: credited, filters: used, date: Date()), at: 0)
-            if history.count > 100 { history.removeLast(history.count - 100) }
-            flash("Papel de parede aplicado")
+            await record(wallpaper, filters: used, date: Date())
         } catch {
             flash("Falha ao aplicar: \(error.localizedDescription)")
         }
+    }
+
+    private func record(_ wallpaper: Wallpaper, filters: ImageFilters, date: Date) async {
+        let credited = await withCredit(wallpaper)
+        history.removeAll { $0.wallpaper.id == wallpaper.id }
+        history.insert(HistoryEntry(wallpaper: credited, filters: filters, date: date), at: 0)
+        if history.count > 100 { history.removeLast(history.count - 100) }
+        flash("Papel de parede aplicado")
     }
 
     func download(_ wallpaper: Wallpaper, size: ExportSize, filters override: ImageFilters? = nil) async {
@@ -228,17 +233,65 @@ final class AppModel {
         rotationTask?.cancel()
         rotationTask = nil
         nextRotation = nil
-        guard rotationEnabled else { return }
+        guard rotationEnabled else {
+            if let rotationActivity { ProcessInfo.processInfo.endActivity(rotationActivity) }
+            rotationActivity = nil
+            return
+        }
+        if rotationActivity == nil {
+            rotationActivity = ProcessInfo.processInfo.beginActivity(
+                options: .userInitiatedAllowingIdleSystemSleep,
+                reason: "Troca automática de papel de parede"
+            )
+        }
         let interval = TimeInterval(max(rotationMinutes, 1) * 60)
-        nextRotation = Date().addingTimeInterval(interval)
+        let lead = min(60, interval / 2)
+        let first = Self.startOfMinute(Date()).addingTimeInterval(interval)
+        nextRotation = first
         rotationTask = Task { [weak self] in
+            var target = first
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(interval))
+                await Self.sleep(until: target.addingTimeInterval(-lead))
                 guard !Task.isCancelled, let self else { return }
-                await self.applyRandom()
-                self.nextRotation = Date().addingTimeInterval(interval)
+                let prepared = await self.prepareTurn()
+                await Self.sleep(until: target)
+                guard !Task.isCancelled else { return }
+                if let prepared {
+                    await self.commit(prepared, date: target)
+                } else {
+                    await self.applyRandom()
+                }
+                let now = Date()
+                repeat { target.addTimeInterval(interval) } while target <= now
+                self.nextRotation = target
             }
         }
+    }
+
+    private func prepareTurn() async -> (wallpaper: Wallpaper, file: URL)? {
+        guard let pick = await randomCandidate(),
+              let file = try? await DesktopService.prepare(pick, filters: ImageFilters(), allScreens: applyToAllScreens)
+        else { return nil }
+        return (pick, file)
+    }
+
+    private func commit(_ prepared: (wallpaper: Wallpaper, file: URL), date: Date) async {
+        do {
+            try DesktopService.show(prepared.file, allScreens: applyToAllScreens)
+            await record(prepared.wallpaper, filters: ImageFilters(), date: date)
+        } catch {
+            flash("Falha ao aplicar: \(error.localizedDescription)")
+        }
+    }
+
+    private static func startOfMinute(_ date: Date) -> Date {
+        Date(timeIntervalSince1970: (date.timeIntervalSince1970 / 60).rounded(.down) * 60)
+    }
+
+    private static func sleep(until date: Date) async {
+        let delay = date.timeIntervalSinceNow
+        guard delay > 0 else { return }
+        try? await Task.sleep(for: .seconds(delay), tolerance: .milliseconds(50))
     }
 
     func flash(_ message: String) {
