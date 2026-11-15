@@ -4,7 +4,7 @@
 
 ## Pane
 
-A native macOS app that keeps your desktop always fresh. Pick a wallpaper from Wikimedia Commons featured pictures, browse by category, save your favorites, and let it rotate automatically on a schedule, from every 15 minutes to once a day, right from the menu bar, with every photographer credited.
+A native macOS app that keeps your desktop always fresh. Browse beautiful wallpapers, save the ones you love, and let Pane change your desktop by itself, so there is always something new to look at.
 
 ### License
 
