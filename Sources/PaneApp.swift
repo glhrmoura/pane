@@ -119,6 +119,16 @@ struct PaneApp: App {
                 }
                 .keyboardShortcut("q", modifiers: [.command, .option])
             }
+            CommandGroup(replacing: .appInfo) {
+                Button("Sobre o Pane") {
+                    NSApp.orderFrontStandardAboutPanel(nil)
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+            }
+            CommandGroup(replacing: .appSettings) {}
+            CommandGroup(replacing: .systemServices) {
+                OpenSettingsButton()
+            }
             CommandGroup(before: .windowList) {
                 ShowMainWindowButton()
             }
@@ -130,10 +140,12 @@ struct PaneApp: App {
             }
         }
 
-        Settings {
+        Window("Configurações", id: "settings") {
             SettingsView()
                 .environment(model)
         }
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
     }
 }
 
@@ -148,5 +160,18 @@ struct ShowMainWindowButton: View {
             NSApp.activate(ignoringOtherApps: true)
         }
         .keyboardShortcut("0", modifiers: .command)
+    }
+}
+
+struct OpenSettingsButton: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("Configurações") {
+            NSApp.setActivationPolicy(.regular)
+            openWindow(id: "settings")
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        .keyboardShortcut(",", modifiers: .command)
     }
 }
