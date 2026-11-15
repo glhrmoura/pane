@@ -216,8 +216,18 @@ enum DesktopService {
     }
 
     static func apply(_ wallpaper: Wallpaper, filters: ImageFilters, allScreens: Bool) async throws {
+        let file = try await prepare(wallpaper, filters: filters, allScreens: allScreens)
+        try show(file, allScreens: allScreens)
+    }
+
+    private static func targetScreens(allScreens: Bool) throws -> [NSScreen] {
         let screens = allScreens ? NSScreen.screens : [NSScreen.main].compactMap { $0 }
         guard !screens.isEmpty else { throw ServiceError.noScreen }
+        return screens
+    }
+
+    static func prepare(_ wallpaper: Wallpaper, filters: ImageFilters, allScreens: Bool) async throws -> URL {
+        let screens = try targetScreens(allScreens: allScreens)
         let widest = screens.map { pixelSize(of: $0).0 }.max() ?? 1920
         let raw = try await WallcraftClient.shared.fetch(wallpaper.url(forWidth: widest))
         let data = try await Task.detached(priority: .userInitiated) {
@@ -227,7 +237,11 @@ enum DesktopService {
         let stamp = Int(Date().timeIntervalSince1970)
         let file = appliedDirectory.appendingPathComponent("\(wallpaper.id)\(filters.fileTag)-\(stamp).jpg")
         try data.write(to: file, options: .atomic)
-        for screen in screens {
+        return file
+    }
+
+    static func show(_ file: URL, allScreens: Bool) throws {
+        for screen in try targetScreens(allScreens: allScreens) {
             try NSWorkspace.shared.setDesktopImageURL(file, for: screen, options: [
                 .imageScaling: NSImageScaling.scaleProportionallyUpOrDown.rawValue,
                 .allowClipping: true,
