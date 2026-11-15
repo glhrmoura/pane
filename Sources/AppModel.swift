@@ -248,7 +248,7 @@ final class AppModel {
             )
         }
         let interval = TimeInterval(max(rotationMinutes, 1) * 60)
-        let lead = min(60, interval / 2)
+        let lead = min(120, interval / 2)
         let first = saved ?? Self.startOfMinute(Date()).addingTimeInterval(interval)
         nextRotation = first
         rotationTask = Task { [weak self] in
@@ -257,11 +257,15 @@ final class AppModel {
                 await Self.sleep(until: target.addingTimeInterval(-lead))
                 guard !Task.isCancelled, let self else { return }
                 var prepared = await self.prepareTurn()
+                while prepared == nil, !Task.isCancelled, target.timeIntervalSinceNow > 5 {
+                    try? await Task.sleep(for: .seconds(5))
+                    prepared = await self.prepareTurn()
+                }
                 await Self.sleep(until: target)
                 var attempts = 0
-                while prepared == nil, attempts < 8, !Task.isCancelled {
+                while prepared == nil, attempts < 24, !Task.isCancelled {
                     attempts += 1
-                    try? await Task.sleep(for: .seconds(15))
+                    try? await Task.sleep(for: .seconds(5))
                     prepared = await self.prepareTurn()
                 }
                 guard !Task.isCancelled else { return }
