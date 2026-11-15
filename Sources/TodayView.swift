@@ -101,7 +101,7 @@ struct NextChangeBlock: View {
                         .foregroundStyle(Palette.inkSoft)
                 }
                 Text(headline(now: context.date))
-                    .font(.display(132, weight: 850))
+                    .font(.display(132, weight: 850).monospacedDigit())
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
