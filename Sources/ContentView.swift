@@ -115,13 +115,17 @@ struct NavTab: View {
 }
 
 struct SettingsButton: View {
+    @Environment(\.openWindow) private var openWindow
+
     var body: some View {
-        SettingsLink {
+        Button {
+            openWindow(id: "settings")
+        } label: {
             TopIcon(icon: "gearshape", active: false, badge: false)
         }
         .buttonStyle(.plain)
         .pointingHand()
-        .help("Ajustes")
+        .help("Configurações")
     }
 }
 
