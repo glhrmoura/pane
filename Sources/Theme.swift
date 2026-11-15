@@ -11,6 +11,7 @@ enum Palette {
     static let rule = dynamic(light: 0xD9D9D4, dark: 0x2C2E31)
     static let well = dynamic(light: 0xEFEFEB, dark: 0x202124)
     static let now = dynamic(light: 0x2B3BFF, dark: 0x7D88FF)
+    static let on = dynamic(light: 0x1F9D55, dark: 0x34C759)
 
     private static func dynamic(light: UInt32, dark: UInt32) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
@@ -140,8 +141,8 @@ struct InkSwitch: View {
             HStack(spacing: 10) {
                 ZStack(alignment: isOn ? .trailing : .leading) {
                     Rectangle()
-                        .fill(isOn ? Palette.ink : Color.clear)
-                        .overlay(Rectangle().strokeBorder(Palette.ink, lineWidth: 1.2))
+                        .fill(isOn ? Palette.on : Color.clear)
+                        .overlay(Rectangle().strokeBorder(isOn ? Palette.on : Palette.ink, lineWidth: 1.2))
                         .frame(width: 34, height: 18)
                     Rectangle()
                         .fill(isOn ? Palette.paper : Palette.ink)
