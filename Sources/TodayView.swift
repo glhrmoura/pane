@@ -42,7 +42,7 @@ struct CurrentPage: View {
                         .font(.display(40))
                         .foregroundStyle(Palette.ink)
                     Text("Sorteie uma foto ou escolha uma no catálogo.")
-                        .font(.system(size: 14))
+                        .font(.ui(14))
                         .foregroundStyle(Palette.inkSoft)
                     Button("Abrir o catálogo", action: openCatalog)
                         .buttonStyle(InkButtonStyle(prominent: false))
@@ -74,7 +74,7 @@ struct CreditLine: View {
                     .font(.caption1)
                     .foregroundStyle(Palette.inkSoft)
             } else {
-                Text("Fotografias de destaque do Wikimedia Commons, com licença livre.")
+                Text("Papéis de parede do Wallcraft em 4K.")
                     .font(.caption1)
                     .foregroundStyle(Palette.inkSoft)
                 Spacer()
@@ -84,7 +84,7 @@ struct CreditLine: View {
     }
 
     private func credit(_ wallpaper: Wallpaper) -> String {
-        wallpaper.license.isEmpty ? "foto de \(wallpaper.author)" : "foto de \(wallpaper.author) · \(wallpaper.license)"
+        wallpaper.credit
     }
 }
 
@@ -103,7 +103,7 @@ struct NextChangeBlock: View {
                     .padding(.bottom, -14)
                     .contentTransition(.numericText())
                 Text(subtitle(now: context.date))
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.ui(14, .medium))
                     .foregroundStyle(Palette.inkSoft)
                 HStack(spacing: 10) {
                     let busy = model.current.map { model.busyIDs.contains($0.wallpaper.id) } ?? false
@@ -307,9 +307,9 @@ struct DropdownField<Panel: View>: View {
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 5) {
                 Text(title)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.ui(12, .semibold))
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 7, weight: .heavy))
+                    .font(.ui(7, .heavy))
                     .rotationEffect(.degrees(open ? 180 : 0))
             }
             .foregroundStyle(Palette.ink)
@@ -336,7 +336,7 @@ struct RotationIntervalMenu: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        DropdownField(title: intervalTitle(model.rotationMinutes)) { close in
+        DropdownField(title: intervalShortLabel(model.rotationMinutes)) { close in
             VStack(alignment: .leading, spacing: 10) {
                 Text("Trocar a cada")
                     .font(.caption1)
@@ -344,8 +344,8 @@ struct RotationIntervalMenu: View {
                 LazyVGrid(columns: [GridItem(.fixed(150), spacing: 6), GridItem(.fixed(150), spacing: 6)], spacing: 4) {
                     ForEach(AppModel.rotationOptions, id: \.self) { minutes in
                         SourceRow(
-                            title: intervalTitle(minutes),
-                            icon: minutes >= 1440 ? "calendar" : "clock",
+                            title: intervalShortLabel(minutes),
+                            icon: intervalIcon(minutes),
                             selected: model.rotationMinutes == minutes
                         ) {
                             model.rotationMinutes = minutes
@@ -356,14 +356,6 @@ struct RotationIntervalMenu: View {
             }
             .padding(14)
             .background(Palette.paper)
-        }
-    }
-
-    private func intervalTitle(_ minutes: Int) -> String {
-        switch minutes {
-        case ..<60: "\(minutes) min"
-        case 1440: "1 dia"
-        default: "\(minutes / 60) h"
         }
     }
 }
@@ -446,14 +438,16 @@ struct SourceRow: View {
         Button(action: action) {
             HStack(spacing: 9) {
                 Image(systemName: icon)
-                    .font(.system(size: 12, weight: .medium))
-                    .frame(width: 16)
+                    .symbolRenderingMode(.hierarchical)
+                    .symbolVariant(selected ? .fill : .none)
+                    .font(.ui(13, .regular))
+                    .frame(width: 18, height: 18)
                 Text(title)
-                    .font(.system(size: 13, weight: selected ? .semibold : .regular))
+                    .font(.ui(13, .medium))
                 Spacer(minLength: 0)
                 if selected {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.ui(10, .bold))
                 }
             }
             .foregroundStyle(selected || hovering ? Palette.ink : Palette.inkSoft)
