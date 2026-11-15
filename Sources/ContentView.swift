@@ -59,7 +59,6 @@ struct ContentView: View {
 }
 
 struct TopBar: View {
-    @Environment(AppModel.self) private var model
     let section: SidebarItem
     let select: (SidebarItem) -> Void
 
@@ -73,7 +72,7 @@ struct TopBar: View {
                         .foregroundStyle(Palette.ink)
                     Spacer()
                     ForEach(SidebarItem.allCases) { item in
-                        NavTab(title: item.title, selected: item == section, count: count(for: item)) {
+                        NavTab(title: item.title, selected: item == section) {
                             select(item)
                         }
                         .keyboardShortcut(KeyEquivalent(Character(String(item.order + 1))), modifiers: .command)
@@ -87,42 +86,26 @@ struct TopBar: View {
             .padding(.bottom, 12)
         }
     }
-
-    private func count(for item: SidebarItem) -> Int? {
-        switch item {
-        case .saved: model.favorites.isEmpty ? nil : model.favorites.count
-        case .history: model.history.isEmpty ? nil : model.history.count
-        default: nil
-        }
-    }
 }
 
 struct NavTab: View {
     let title: String
     let selected: Bool
-    var count: Int?
     let action: () -> Void
     @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(title)
-                    .font(.display(21, weight: selected ? 850 : 550))
-                if let count {
-                    Text("\(count)")
-                        .font(.figures)
-                        .foregroundStyle(Palette.inkFaint)
+            Text(title)
+                .font(.display(21, weight: 600))
+                .foregroundStyle(selected || hovering ? Palette.ink : Palette.inkSoft)
+                .padding(.bottom, 3)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(Palette.ink)
+                        .frame(height: selected ? 2 : 0)
                 }
-            }
-            .foregroundStyle(selected || hovering ? Palette.ink : Palette.inkSoft)
-            .padding(.bottom, 3)
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(Palette.ink)
-                    .frame(height: selected ? 2 : 0)
-            }
-            .contentShape(Rectangle())
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
@@ -151,7 +134,7 @@ struct TopIcon: View {
     var body: some View {
         let lit = active || hovering
         Image(systemName: icon)
-            .font(.system(size: 13, weight: .medium))
+            .font(.ui(13, .medium))
             .foregroundStyle(lit ? Palette.paper : Palette.ink)
             .frame(width: 32, height: 32)
             .background(lit ? Palette.ink : Color.clear)
@@ -177,7 +160,7 @@ struct ClearFiltersButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: "arrow.counterclockwise")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.ui(11, .semibold))
                 .foregroundStyle(hovering ? Palette.paper : Palette.ink)
                 .frame(width: 22, height: 22)
                 .background(hovering ? Palette.ink : Color.clear)
