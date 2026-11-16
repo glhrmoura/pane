@@ -198,11 +198,11 @@ final class AppModel {
         }
     }
 
-    func applyRandom() async {
+    func applyRandom(anywhere: Bool = false) async {
         guard !isTurning else { return }
         isTurning = true
         defer { isTurning = false }
-        guard let pick = await randomCandidate() else {
+        guard let pick = await randomCandidate(source: anywhere ? .everything : rotationSource) else {
             flash("Nada para sortear ainda")
             return
         }
@@ -213,16 +213,17 @@ final class AppModel {
         history = []
     }
 
-    private func randomCandidate() async -> Wallpaper? {
+    private func randomCandidate(source origin: RotationSource? = nil) async -> Wallpaper? {
+        let origin = origin ?? rotationSource
         let currentID = current?.wallpaper.id
         func pick(_ pool: [Wallpaper]) -> Wallpaper? {
             let others = pool.filter { $0.id != currentID }
             return (others.isEmpty ? pool : others).randomElement()
         }
-        if rotationSource == .favorites, !favorites.isEmpty {
+        if origin == .favorites, !favorites.isEmpty {
             return pick(favorites)
         }
-        let source = rotationSource == .everything
+        let source = origin == .everything
             ? WallCategory.allCases.randomElement() ?? category
             : rotationCategory
         if let slice = try? await client.randomSlice(category: source), let choice = pick(slice) {

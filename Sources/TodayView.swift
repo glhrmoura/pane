@@ -128,6 +128,15 @@ struct NextChangeBlock: View {
                     .buttonStyle(InkButtonStyle())
                     .keyboardShortcut(.return, modifiers: .command)
                     .disabled(model.isTurning || busy)
+                    Button {
+                        Task { await model.applyRandom(anywhere: true) }
+                    } label: {
+                        Image(systemName: "dice")
+                    }
+                    .buttonStyle(InkButtonStyle(prominent: false))
+                    .keyboardShortcut("r", modifiers: .command)
+                    .disabled(model.isTurning || busy)
+                    .help("Papel de parede aleatório de qualquer categoria")
                     if let current = model.current {
                         let favorite = model.isFavorite(current.wallpaper)
                         Button {
