@@ -78,7 +78,10 @@ struct TopBar: View {
                         .keyboardShortcut(KeyEquivalent(Character(String(item.order + 1))), modifiers: .command)
                     }
                 }
-                SettingsButton()
+                HStack(spacing: 8) {
+                    RandomButton()
+                    SettingsButton()
+                }
                 .padding(.top, 6)
             }
             .padding(.horizontal, 28)
@@ -111,6 +114,23 @@ struct NavTab: View {
         .onHover { hovering = $0 }
         .pointingHand()
         .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+struct RandomButton: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Button {
+            Task { await model.applyRandom(anywhere: true) }
+        } label: {
+            TopIcon(icon: "dice", active: model.isTurning, badge: false)
+        }
+        .buttonStyle(.plain)
+        .pointingHand()
+        .keyboardShortcut("r", modifiers: .command)
+        .disabled(model.isTurning)
+        .help("Papel de parede aleatório")
     }
 }
 
